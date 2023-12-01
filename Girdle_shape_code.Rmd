@@ -1,0 +1,820 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+editor_options:
+  chunk_output_type: inline
+---
+
+
+
+```{r, load required packages}
+
+library(geiger)
+library(ggplot2)
+library(nlme)
+library(phytools)
+library(caper)
+library(MuMIn)
+library(RRPP)
+library(phylolm)
+library(geomorph)
+library(raster)
+library(Morpho)
+
+```
+
+
+```{r, pelvis shape definition}
+#for all the landmarked specimens (87), run for pelvic-only shape analysis#
+pelvic<-read.morphologika("Pelvic_pls.txt")
+
+#for reduced dataset #1 (86), rerun this code for pelvic-clavicle integration analysis#
+pelvic<-read.morphologika("Pelvic_pls_b.txt")
+
+#for reduced dataset #2 (85), rerun this code for pelvic-scapulocoracoid integration analysis#
+pelvic<-read.morphologika("Pelvic_pls_c.txt")
+
+
+pelvic.labels <- as.data.frame(pelvic$labels)
+
+
+pelvic.coords <-pelvic$coords
+pelvic.gpa <- gpagen(pelvic$coords, PrinAxes = FALSE)
+
+gpa.coords<-pelvic.gpa$coords
+
+gpa.csize<-pelvic.gpa$Csize
+gpa.species<-pelvic.gpa$Species
+
+pelvicgpa<-geomorph.data.frame(gpa.coords, gpa.csize, pelvic.labels)
+
+pelvic.pca <- gm.prcomp(pelvic.gpa$coords)
+
+
+pelvic.pca <- gm.prcomp(pelvic.gpa$coords)
+write.csv("pelvic_test.csv", x=(pelvic.pca$x))
+
+
+
+## Calculate mean landmark configuration for sample
+pelv.mshape.slide <- mshape(pelvic.gpa$coords)
+## plots a map of the coordinates in order
+plot(pelv.mshape.slide)
+summary(pelv.mshape.slide)
+#### TANGENT SPACE
+### what do they look like?
+pelv.slide.TS <- gm.prcomp(pelvic.gpa$coords)
+plot(pelv.slide.TS)
+
+### SUBSET COORDS
+## new object where we have taken the coordinates of the gpa and grouped them according to species
+Species.pelv.coords <- coords.subset(A = pelvic.gpa$coords, group = pelvic.labels$Species)
+## calculating the mean shape for the new object from above (important)
+Species.pelv.Means.coords <- sapply(Species.pelv.coords, mshape, simplify = "array")
+
+dimnames(Species.pelv.Means.coords)[3]<- list(as.vector(pelvic.labels$Species))
+print(Species.pelv.Means.coords)
+dimnames(Species.pelv.Means.coords)[3]
+SpeciesList <- rownames
+(pelvic.labels$Species)
+str(SpeciesList)
+
+pelvic.labels$Species <- paste(pelvic.labels$Species, sep = ".")
+Species.pelv.coords <- coords.subset(A = pelvic.gpa$coords, group = pelvic.labels$Species)
+  Species.pelv.Means.coords <- sapply(Species.pelv.coords, mshape, simplify = "array")
+
+
+
+
+#######making tree and matching tree tips
+pelvMeans <- read.csv(file = "pelvic_test.csv", header=TRUE,row.names=1,stringsAsFactors = F)
+## TREE ----> 
+pelv.tree<-read.tree("ZW.tre")
+# matches dataframe species to phylogeny
+pelv.plusTree <- treedata(pelv.tree, pelvMeans)$phy
+
+pelvMeans
+# adds back in phy
+pelv.finalTree <- treedata(pelv.plusTree, pelvMeans)$phy
+
+plot.phylo(pelv.finalTree, type="fan")
+
+pelv.mshape.slide <- mshape(pelvic.gpa$coords)
+## plots a map of the coordinates in order
+plot(pelv.mshape.slide)
+
+pelv.tree<-read.tree("ZW.tre")
+
+#phylogenetic signal
+pelvsig<-physignal(Species.pelv.Means.coords, pelv.plusTree, iter = 999)
+
+
+plot(pelvsig)
+
+```
+
+
+```{r, pelvis shape extremes visualisation}
+pelv.link <- as.matrix(read.csv("link_pelv_whole.txt", header =FALSE, sep = ",", dec = "."))
+
+pelvic.mshape <- mshape(pelvic.gpa$coords)
+
+plotRefToTarget(pelvic.pca$shapes$shapes.comp1$min, pelvic.mshape)
+plotRefToTarget(pelvic.pca$shapes$shapes.comp1$max, pelvic.mshape)
+plotRefToTarget(pelvic.pca$shapes$shapes.comp2$min, pelvic.mshape)
+plotRefToTarget(pelvic.pca$shapes$shapes.comp2$max, pelvic.mshape)
+
+plotRefToTarget(pelvic.mshape,pelvic.pca$shapes$shapes.comp1$min,method="points", mag=1, gridPars=gridPar(tar.pt.bg = "blue", tar.link.col="red",
+tar.link.lwd=3), label=T)
+
+plotRefToTarget(pelvic.mshape,pelvic.pca$shapes$shapes.comp1$max,method="points", mag = 1, gridPars=gridPar(tar.pt.bg = "blue", tar.link.col="red",
+tar.link.lwd=3), label=T)
+
+plotRefToTarget(pelvic.pca$shapes$shapes.comp1$min,pelvic.pca$shapes$shapes.comp1$max,method="points", mag = 1, links=pelv.link, gridPars=gridPar(tar.pt.bg = "blue", tar.link.col="red",
+tar.link.lwd=3), label=T)
+
+plotRefToTarget(pelvic.pca$shapes$shapes.comp2$min,pelvic.pca$shapes$shapes.comp2$max,method="points", links=pelv.link,mag = 1, gridPars=gridPar(tar.pt.bg = "blue", tar.link.col="red",
+tar.link.lwd=3), label=T)
+
+```
+
+
+```{r, ecomorph and morph-morph analyses setup: pelvis}
+
+pelv<-read.csv("gix_pelv.csv")
+
+#name each row as the species name
+rownames(pelv)<-pelv$Species
+
+#check it out
+head(pelv)
+
+#Load tree
+tree<-read.tree("ZW.tre")
+
+#Tree pruned
+pelv_tree<-treedata(tree, pelv)$phy
+
+#dataframe
+
+gix<-vcv.phylo(pelv_tree, pelv)
+is.matrix(gix)
+write.csv(gix, file="Gix.csv")
+
+#dataframe
+pelv<-data.frame(pelv)
+rownames(pelv)
+
+PC1A<-pelv$Comp1
+PC2A<-pelv$Comp2
+PC3A<-pelv$Comp3
+
+SubsA<-pelv$Substrate
+DispA<-pelv$Disparity
+LimbNA<-pelv$LimbN
+LimbNA<-as.factor(LimbNA)
+relFLLA<-log((pelv$FLL+0.001)/(pelv$HdL))
+relHLLA<-log((pelv$HLL+0.001)/(pelv$HdL))
+elongA<-log((pelv$SVL)/(pelv$HdL))
+StatusA<-pelv$Limb_status
+StatusA<-as.factor(StatusA)
+FLLA<-log(pelv$FLL+0.001)
+HLLA<-log(pelv$HLL+0.001)
+SVLA<-log(pelv$SVL)
+HdLA<-log(pelv$HdL)
+SubsA<-as.factor(SubsA)
+PSVnA<-log(pelv$PSVn)
+extA<-as.factor(pelv$HL_extension)
+XextA<-as.factor(pelv$FL_extension)
+ManA<-as.factor(pelv$Man)
+PesA<-as.factor(pelv$Pes)
+
+
+```
+
+
+```{r, pelvis fullshape analyses}
+
+#limb status
+pelv.StatusA<-procD.pgls(Species.pelv.Means.coords~StatusA, phy=pelv.plusTree)
+anova(pelv.StatusA)
+pelv.StatusA.test<-pairwise(pelv.StatusA, groups=StatusA)
+summary(pelv.StatusA.test) 
+
+#number of fingers
+pelv.ManA<-procD.pgls(Species.pelv.Means.coords~ManA, phy=pelv.plusTree)
+anova(pelv.ManA)
+pelv.ManA.test<-pairwise(pelv.ManA, groups=ManA)
+summary(pelv.ManA.test) 
+
+#number of toes
+pelv.PesA<-procD.pgls(Species.pelv.Means.coords~PesA, phy=pelv.plusTree)
+anova(pelv.PesA)
+pelv.PesA.test<-pairwise(pelv.PesA, groups=PesA)
+summary(pelv.PesA.test) 
+
+#distal forelimb development
+pelv.extA<-procD.pgls(Species.pelv.Means.coords~extA, phy=pelv.plusTree)
+anova(pelv.extA)
+pelv.extA.test<-pairwise(pelv.extA, groups=extA)
+summary(pelv.extA.test)
+
+#distal hindlimb development
+pelv.XextA<-procD.pgls(Species.pelv.Means.coords~XextA, phy=pelv.plusTree)
+anova(pelv.XextA)
+pelv.XextA.test<-pairwise(pelv.XextA, groups=XextA)
+summary(pelv.XextA.test)
+
+#number of limb pairs
+pelv.limb<-procD.pgls(Species.pelv.Means.coords~LimbNA, phy=pelv.plusTree)
+anova(pelv.limb)
+pelv.limb.test<-pairwise(pelv.limb, groups=LimbNA)
+summary(pelv.limb.test)
+
+#limb disparity
+pelv.DispA<-procD.pgls(Species.pelv.Means.coords~DispA, phy=pelv.plusTree)
+anova(pelv.DispA)
+
+#relative hindlimb length (HLL/SVL)
+pelv.relHLLA<-procD.pgls(Species.pelv.Means.coords~relHLLA, phy=pelv.plusTree)
+anova(pelv.relHLLA)
+
+#SVL
+pelv.SVLA<-procD.pgls(Species.pelv.Means.coords~SVLA, phy=pelv.plusTree)
+anova(pelv.SVLA)
+
+#relative forelimb length (FLL/SVL)
+pelv.relFLLA<-procD.pgls(Species.pelv.Means.coords~relFLLA, phy=pelv.plusTree)
+anova(pelv.relFLLA)
+
+#trunk elongation, snout-vent length scaled by head length (SVL/HdL)
+pelv.trunkelongA<-procD.pgls(Species.pelv.Means.coords~elongA, phy=pelv.plusTree)
+anova(pelv.trunkelongA)
+
+#substrate type
+pelv.SubsA<-procD.pgls(Species.pelv.Means.coords~SubsA, phy=pelv.plusTree)
+anova(pelv.SubsA)
+pelv.SubsA.test<-pairwise(pelv.SubsA, groups=StatusA)
+summary(pelv.SubsA.test) 
+
+#presacral vertebrae numbers
+pelv.PSVnA<-procD.pgls(Species.pelv.Means.coords~PSVnA, phy=pelv.plusTree)
+anova(pelv.PSVnA)
+
+```
+
+
+```{r, clavicle shape definition}
+#for all the landmarked specimens (89), run for clavicle shape analysis#
+
+clav<-read.morphologika("Clav_reflected.txt")
+
+#reduced dataset (86) for clavicle-pelvis integration analysis#
+clav<-read.morphologika("Clav_reflected_pls.txt")
+
+#reduced dataset (85) for clavicle-scapulocoracoid integration analysis#
+clav<-read.morphologika("Clav_c.txt")
+
+  sliding_clav.side <- as.matrix(read.csv("sliding_clav_side.txt", header = FALSE, sep = ",", dec = "."))
+
+
+link_clav_side <- as.matrix(read.csv("link_clav_side.txt", header =FALSE, sep = ",", dec = "."))
+
+
+clav.labels <- as.data.frame(clav$labels)
+
+
+clav.coords <-clav$coords
+clav.gpa <- gpagen(clav$coords, curves =sliding_clav.side, PrinAxes = FALSE)
+
+gpa.coords<-clav.gpa$coords
+
+gpa.csize<-clav.gpa$Csize
+gpa.species<-clav.gpa$Species
+
+clavgpa<-geomorph.data.frame(gpa.coords, gpa.csize, clav.labels)
+
+clav.pca <- gm.prcomp(clav.gpa$coords)
+
+
+clav.pca <- gm.prcomp(clav.gpa$coords)
+write.csv("clav_test.csv", x=(clav.pca$x))
+
+
+
+## Calculate mean landmark configuration for sample
+clav.mshape.slide <- mshape(clav.gpa$coords)
+## plots a map of the coordinates in order
+plot(clav.mshape.slide)
+summary(clav.mshape.slide)
+#### TANGENT SPACE
+### what do they look like?
+clav.slide.TS <- gm.prcomp(clav.gpa$coords)
+plot(clav.slide.TS)
+
+### SUBSET COORDS
+## new object where we have taken the coordinates of the gpa and grouped them according to species
+Species.clav.coords <- coords.subset(A = clav.gpa$coords, group = clav.labels$Species)
+## calculating the mean shape for the new object from above (important)
+Species.clav.Means.coords <- sapply(Species.clav.coords, mshape, simplify = "array")
+
+dimnames(Species.clav.Means.coords)[3]<- list(as.vector(clav.labels$Species))
+print(Species.clav.Means.coords)
+dimnames(Species.clav.Means.coords)[3]
+SpeciesList <- rownames
+(clav.labels$Species)
+str(SpeciesList)
+
+clav.labels$Species <- paste(clav.labels$Species, sep = ".")
+Species.clav.coords <- coords.subset(A = clav.gpa$coords, group = clav.labels$Species)
+  Species.clav.Means.coords <- sapply(Species.clav.coords, mshape, simplify = "array")
+
+
+
+
+#######making tree and matching tree tips
+clavMeans <- read.csv(file = "clav_test.csv", header=TRUE,row.names=1,stringsAsFactors = F)
+## TREE ----> 
+clav.tree<-read.tree("ZW.tre")
+# matches dataframe species to phylogeny
+clav.plusTree <- treedata(clav.tree, clavMeans)$phy
+
+clavMeans
+# adds back in phy
+clav.finalTree <- treedata(clav.plusTree, clavMeans)$phy
+
+plot.phylo(clav.finalTree, type="fan")
+
+clav.mshape.slide <- mshape(clav.gpa$coords)
+## plots a map of the coordinates in order
+plot(clav.mshape.slide)
+
+clav.tree<-read.tree("ZW.tre")
+
+#phylogenetic signal
+clavsig<-physignal(Species.clav.Means.coords, clav.plusTree, iter = 999)
+
+
+plot(clavsig)
+
+```
+
+
+```{r, clavicle visualisation}
+clav.mshape <- mshape(clav.gpa$coords)
+plotRefToTarget(clav.pca$shapes$shapes.comp1$min, clav.mshape)
+plotRefToTarget(clav.pca$shapes$shapes.comp1$max, clav.mshape)
+plotRefToTarget(clav.pca$shapes$shapes.comp2$min, clav.mshape)
+plotRefToTarget(clav.pca$shapes$shapes.comp2$max, clav.mshape)
+
+plotRefToTarget(clav.mshape,clav.pca$shapes$shapes.comp1$min,method="points", mag=1,links=link_clav_side, gridPars=gridPar(tar.pt.bg = "blue", pt.size = 0.5, tar.pt.size = 0.5, tar.link.col="red",
+tar.link.lwd=3), label=F)
+
+plotRefToTarget(clav.mshape,clav.pca$shapes$shapes.comp1$max,method="points", mag=1,links=link_clav_side, gridPars=gridPar(tar.pt.bg = "blue", pt.size = 0.5, tar.pt.size = 0.5, tar.link.col="red",
+tar.link.lwd=3), label=F)
+
+
+plotRefToTarget(clav.mshape,clav.pca$shapes$shapes.comp2$min,method="points", mag = 1, links=link_clav_side, gridPars=gridPar(tar.pt.bg = "blue", pt.size = 0.5, tar.pt.size = 0.5, tar.link.col="red",
+tar.link.lwd=3), label=F)
+
+plotRefToTarget(clav.pca$shapes$shapes.comp1$min,clav.pca$shapes$shapes.comp1$max,method="points",links=link_clav_side, mag =1, gridPars=gridPar(tar.pt.bg = "blue",pt.size = 0.5, tar.pt.size = 0.5, tar.link.col="red",
+tar.link.lwd=1), label=F)
+
+plotRefToTarget(clav.pca$shapes$shapes.comp2$min,clav.pca$shapes$shapes.comp2$max,method="points",links=link_clav_side, mag =1, gridPars=gridPar(tar.pt.bg = "blue",pt.size = 0.5, tar.pt.size = 0.5, tar.link.col="red",
+tar.link.lwd=1), label=F)
+
+plotRefToTarget(clav.pca$shapes$shapes.comp3$min,clav.pca$shapes$shapes.comp3$max,method="points",links=link_clav_side, mag =1, gridPars=gridPar(tar.pt.bg = "blue",pt.size = 0.5, tar.pt.size = 0.5, tar.link.col="red",
+tar.link.lwd=1), label=F)
+
+
+```
+
+
+```{r, ecomorph and morph-morph analyses setup: clavicle}
+
+pect<-read.csv("cix_clav_side.csv")
+
+#name each row as the species name
+rownames(pect)<-pect$Species
+
+#check it out
+head(pect)
+
+#Load tree
+tree<-read.tree("ZW.tre")
+
+#Tree pruned
+pect_tree<-treedata(tree, pect)$phy
+
+#dataframe
+
+cix<-vcv.phylo(pect_tree, pect)
+is.matrix(cix)
+write.csv(cix, file="cix.csv")
+
+#dataframe
+pect<-data.frame(pect)
+rownames(pect)
+
+
+PC1<-pect$Comp1
+PC2<-pect$Comp2
+PC3<-pect$Comp3
+
+Subs<-pect$Substrate
+Disp<-pect$Disparity
+LimbN<-pect$LimbN
+LimbN<-as.factor(LimbN)
+relFLL<-log((pect$FLL+0.001)/(pect$HdL))
+relHLL<-log((pect$HLL+0.001)/(pect$HdL))
+(pect$HLL+0.001)/(pect$HdL)
+relHLL
+
+
+elong<-log((pect$SVL)/(pect$HdL))
+elong
+Status<-pect$Limb_status
+Status<-as.factor(Status)
+FLL<-log(pect$FLL+0.001)
+FLL
+HLL<-log(pect$HLL+0.001)
+SVL<-log(pect$SVL)
+HdL<-log(pect$HdL)
+Subs<-as.factor(Subs)
+PSVn<-log(pect$PSVn)
+PSVn
+ext<-as.factor(pect$FL_extension)
+ext2<-as.factor(pect$HL_extension)
+Man<-as.factor(pect$Man)
+Pes<-as.factor(pect$Pes)
+
+```
+
+
+```{r, clavicle fullshape analyses}
+
+#limb status
+clav.Status<-procD.pgls(Species.clav.Means.coords~Status, phy=clav.plusTree)
+anova(clav.Status)
+clav.Status.test<-pairwise(clav.Status, groups=Status)
+summary(clav.Status.test) 
+
+#number of fingers
+clav.Man<-procD.pgls(Species.clav.Means.coords~Man, phy=clav.plusTree)
+anova(clav.Man)
+clav.Man.test<-pairwise(clav.Man, groups=Man)
+summary(clav.Man.test) 
+
+#number of toes
+clav.Pes<-procD.pgls(Species.clav.Means.coords~Pes, phy=clav.plusTree)
+anova(clav.Pes)
+clav.Pes.test<-pairwise(clav.Pes, groups=Pes)
+summary(clav.Pes.test) 
+
+#distal forelimb development
+clav.ext<-procD.pgls(Species.clav.Means.coords~ext, phy=clav.plusTree)
+anova(clav.ext)
+clav.ext.test<-pairwise(clav.ext, groups=ext)
+summary(clav.ext.test)
+
+#distal hindlimb development
+clav.ext2<-procD.pgls(Species.clav.Means.coords~ext2, phy=clav.plusTree)
+anova(clav.ext2)
+clav.ext2.test<-pairwise(clav.ext2, groups=ext2)
+summary(clav.ext2.test)
+
+#number of limb pairs
+clav.limb<-procD.pgls(Species.clav.Means.coords~LimbN, phy=clav.plusTree)
+anova(clav.limb)
+clav.limb.test<-pairwise(clav.limb, groups=LimbN)
+summary(clav.limb.test)
+
+#limb disparity
+clav.Disp<-procD.pgls(Species.clav.Means.coords~Disp, phy=clav.plusTree)
+anova(clav.Disp)
+
+#relative hindlimb length (HLL/SVL)
+clav.relHLL<-procD.pgls(Species.clav.Means.coords~relHLL, phy=clav.plusTree)
+anova(clav.relHLL)
+
+#SVL
+clav.SVL<-procD.pgls(Species.clav.Means.coords~SVL, phy=clav.plusTree)
+anova(clav.SVL)
+
+#relative forelimb length (FLL/SVL)
+clav.relFLL<-procD.pgls(Species.clav.Means.coords~relFLL, phy=clav.plusTree)
+anova(clav.relFLL)
+
+#trunk elongation, snout-vent length scaled by head length (SVL/HdL)
+clav.trunkelong<-procD.pgls(Species.clav.Means.coords~elong, phy=clav.plusTree)
+anova(clav.trunkelong)
+
+#substrate type
+clav.Subs<-procD.pgls(Species.clav.Means.coords~Subs, phy=clav.plusTree)
+anova(clav.Subs)
+clav.Subs.test<-pairwise(clav.Subs, groups=Status)
+summary(clav.Subs.test) 
+
+#presacral vertebrae numbers
+clav.PSVn<-procD.pgls(Species.clav.Means.coords~PSVn, phy=clav.plusTree)
+anova(clav.PSVn)
+
+```
+
+
+```{r, Scapulocoracoid (SCP) shape definition}
+#Total dataset (89)
+SCP<-read.morphologika("SCP_ref.txt")
+
+#reduced dataset for SCP-clavicle integration analysis (85) 
+SCP<-read.morphologika("SCP_ref_b.txt")
+
+#reduced dataset for SCP-pelvis integration analysis (85)
+SCP<-read.morphologika("SCP_c.txt")
+
+sliding_SCP.side <- as.matrix(read.csv("sliding_SCP_side.txt", header = FALSE, sep = ",", dec = "."))
+
+
+link_SCP_side <- as.matrix(read.csv("link_SCP_side.txt", header =FALSE, sep = ",", dec = "."))
+
+
+SCP.labels <- as.data.frame(SCP$labels)
+
+
+SCP.coords <-SCP$coords
+SCP.gpa <- gpagen(SCP$coords, curves =sliding_SCP.side, PrinAxes = FALSE)
+
+gpa.coords<-SCP.gpa$coords
+
+gpa.csize<-SCP.gpa$Csize
+gpa.species<-SCP.gpa$Species
+
+SCPgpa<-geomorph.data.frame(gpa.coords, gpa.csize, SCP.labels)
+
+SCP.pca <- gm.prcomp(SCP.gpa$coords)
+
+
+SCP.pca <- gm.prcomp(SCP.gpa$coords)
+write.csv("SCP_test.csv", x=(SCP.pca$x))
+
+
+
+## Calculate mean landmark configuration for sample
+SCP.mshape.slide <- mshape(SCP.gpa$coords)
+## plots a map of the coordinates in order
+plot(SCP.mshape.slide)
+summary(SCP.mshape.slide)
+#### TANGENT SPACE
+### what do they look like?
+SCP.slide.TS <- gm.prcomp(SCP.gpa$coords)
+plot(SCP.slide.TS)
+
+### SUBSET COORDS
+## new object where we have taken the coordinates of the gpa and grouped them according to species
+Species.SCP.coords <- coords.subset(A = SCP.gpa$coords, group = SCP.labels$Species)
+## calculating the mean shape for the new object from above (important)
+Species.SCP.Means.coords <- sapply(Species.SCP.coords, mshape, simplify = "array")
+
+dimnames(Species.SCP.Means.coords)[3]<- list(as.vector(SCP.labels$Species))
+print(Species.SCP.Means.coords)
+dimnames(Species.SCP.Means.coords)[3]
+SpeciesList <- rownames
+(SCP.labels$Species)
+str(SpeciesList)
+
+SCP.labels$Species <- paste(SCP.labels$Species, sep = ".")
+Species.SCP.coords <- coords.subset(A = SCP.gpa$coords, group = SCP.labels$Species)
+  Species.SCP.Means.coords <- sapply(Species.SCP.coords, mshape, simplify = "array")
+
+
+
+
+#######making tree and matching tree tips
+SCPMeans <- read.csv(file = "SCP_test.csv", header=TRUE,row.names=1,stringsAsFactors = F)
+## TREE ----> 
+SCP.tree<-read.tree("ZW.tre")
+# matches dataframe species to phylogeny
+SCP.plusTree <- treedata(SCP.tree, SCPMeans)$phy
+
+SCPMeans
+# adds back in phy
+SCP.finalTree <- treedata(SCP.plusTree, SCPMeans)$phy
+
+plot.phylo(SCP.finalTree, type="fan")
+
+SCP.mshape.slide <- mshape(SCP.gpa$coords)
+## plots a map of the coordinates in order
+plot(SCP.mshape.slide)
+
+SCP.tree<-read.tree("ZW.tre")
+
+#phylogenetic signal
+SCPsig<-physignal(Species.SCP.Means.coords, SCP.plusTree, iter = 999)
+
+
+plot(SCPsig)
+
+```
+
+
+```{r, Scapulocoracoid (SCP) visualisation}
+SCP.mshape <- mshape(SCP.gpa$coords)
+plotRefToTarget(SCP.pca$shapes$shapes.comp1$min, SCP.mshape)
+plotRefToTarget(SCP.pca$shapes$shapes.comp1$max, SCP.mshape)
+plotRefToTarget(SCP.pca$shapes$shapes.comp2$min, SCP.mshape)
+plotRefToTarget(SCP.pca$shapes$shapes.comp2$max, SCP.mshape)
+
+plotRefToTarget(SCP.mshape,SCP.pca$shapes$shapes.comp1$min,method="points", mag=1,links=link_SCP_side, gridPars=gridPar(tar.pt.bg = "blue", pt.size = 0.5, tar.pt.size = 0.5, tar.link.col="red",
+tar.link.lwd=3), label=F)
+
+plotRefToTarget(SCP.mshape,SCP.pca$shapes$shapes.comp1$max,method="points", mag=1,links=link_SCP_side, gridPars=gridPar(tar.pt.bg = "blue", pt.size = 0.5, tar.pt.size = 0.5, tar.link.col="red",
+tar.link.lwd=3), label=F)
+
+
+plotRefToTarget(SCP.mshape,SCP.pca$shapes$shapes.comp2$min,method="points", mag = 1, links=link_SCP_side, gridPars=gridPar(tar.pt.bg = "blue", pt.size = 0.5, tar.pt.size = 0.5, tar.link.col="red",
+tar.link.lwd=3), label=F)
+
+plotRefToTarget(SCP.pca$shapes$shapes.comp1$min,SCP.pca$shapes$shapes.comp1$max,method="points",links=link_SCP_side, mag =1, gridPars=gridPar(tar.pt.bg = "blue",pt.size = 0.5, tar.pt.size = 0.5, tar.link.col="red",
+tar.link.lwd=1), label=F)
+
+plotRefToTarget(SCP.pca$shapes$shapes.comp2$min,SCP.pca$shapes$shapes.comp2$max,method="points",links=link_SCP_side, mag =1, gridPars=gridPar(tar.pt.bg = "blue",pt.size = 0.5, tar.pt.size = 0.5, tar.link.col="red",
+tar.link.lwd=1), label=F)
+
+plotRefToTarget(SCP.pca$shapes$shapes.comp3$min,SCP.pca$shapes$shapes.comp3$max,method="points",links=link_SCP_side, mag =1, gridPars=gridPar(tar.pt.bg = "blue",pt.size = 0.5, tar.pt.size = 0.5, tar.link.col="red",
+tar.link.lwd=1), label=F)
+
+
+```
+
+
+```{r, ecomorph and morph-morph analyses setup: SCP}
+
+corax<-read.csv("rex_SCP_side.csv")
+
+#phylimb.one.purged
+#name each row as the species name
+rownames(corax)<-corax$Species
+
+#check it out
+head(corax)
+
+#Load tree
+tree<-read.tree("ZW.tre")
+
+#Tree pruned
+corax_tree<-treedata(tree, corax)$phy
+
+#dataframe
+
+rex<-vcv.phylo(corax_tree, corax)
+is.matrix(rex)
+write.csv(rex, file="Rex.csv")
+
+#dataframe
+corax<-data.frame(corax)
+rownames(corax)
+
+
+PC1B<-corax$Comp1
+PC2B<-corax$Comp2
+PC3B<-corax$Comp3
+
+SubsB<-corax$Substrate
+DispB<-corax$Disparity
+LimbNB<-corax$LimbN
+LimbNB<-as.factor(LimbN)
+relFLLB<-log((corax$FLL+0.001)/(corax$HdL))
+relHLLB<-log((corax$HLL+0.001)/(corax$HdL))
+
+elongB<-log((corax$SVL)/(corax$HdL))
+
+StatusB<-corax$Limb_status
+StatusB<-as.factor(StatusB)
+FLLB<-log(corax$FLL+0.001)
+HLLB<-log(corax$HLL+0.001)
+SVLB<-log(corax$SVL)
+HdLB<-log(corax$HdL)
+SubsB<-as.factor(Subs)
+PSVnB<-log(corax$PSVn)
+extB<-as.factor(corax$FL_extension)
+ext2B<-as.factor(corax$HL_extension)
+ManB<-as.factor(corax$Man)
+PesB<-as.factor(corax$Pes)
+
+```
+
+
+```{r, SCP fullshape analyses}
+
+#limb status
+SCP.StatusB<-procD.pgls(Species.SCP.Means.coords~StatusB, phy=SCP.plusTree)
+anova(SCP.StatusB)
+SCP.StatusB.test<-pairwise(SCP.StatusB, groups=StatusB)
+summary(SCP.StatusB.test) 
+
+#number of fingers
+SCP.ManB<-procD.pgls(Species.SCP.Means.coords~ManB, phy=SCP.plusTree)
+anova(SCP.ManB)
+SCP.ManB.test<-pairwise(SCP.ManB, groups=ManB)
+summary(SCP.ManB.test) 
+
+#number of toes
+SCP.PesB<-procD.pgls(Species.SCP.Means.coords~PesB, phy=SCP.plusTree)
+anova(SCP.PesB)
+SCP.PesB.test<-pairwise(SCP.PesB, groups=PesB)
+summary(SCP.PesB.test) 
+
+#distal forelimb development
+SCP.extB<-procD.pgls(Species.SCP.Means.coords~extB, phy=SCP.plusTree)
+anova(SCP.extB)
+SCP.extB.test<-pairwise(SCP.extB, groups=extB)
+summary(SCP.extB.test)
+
+#distal hindlimb development
+SCP.ext2B<-procD.pgls(Species.SCP.Means.coords~ext2B, phy=SCP.plusTree)
+anova(SCP.ext2B)
+SCP.ext2B.test<-pairwise(SCP.ext2B, groups=ext2B)
+summary(SCP.ext2B.test)
+
+#number of limb pairs
+SCP.limbB<-procD.pgls(Species.SCP.Means.coords~LimbNB, phy=SCP.plusTree)
+anova(SCP.limbB)
+SCP.limbB.test<-pairwise(SCP.limbB, groups=LimbNB)
+summary(SCP.limbB.test)
+
+#limb disparity
+SCP.DispB<-procD.pgls(Species.SCP.Means.coords~DispB, phy=SCP.plusTree)
+anova(SCP.DispB)
+
+#relative hindlimb length (HLL/SVL)
+SCP.relHLLB<-procD.pgls(Species.SCP.Means.coords~relHLLB, phy=SCP.plusTree)
+anova(SCP.relHLLB)
+
+#SVL
+SCP.SVLB<-procD.pgls(Species.SCP.Means.coords~SVLB, phy=SCP.plusTree)
+anova(SCP.SVLB)
+
+#relative forelimb length (FLL/SVL)
+SCP.relFLLB<-procD.pgls(Species.SCP.Means.coords~relFLLB, phy=SCP.plusTree)
+anova(SCP.relFLLB)
+
+#trunk elongation, snout-vent length scaled by head length (SVL/HdL)
+SCP.trunkelongB<-procD.pgls(Species.SCP.Means.coords~elongB, phy=SCP.plusTree)
+anova(SCP.trunkelongB)
+
+#substrate type
+SCP.SubsB<-procD.pgls(Species.SCP.Means.coords~SubsB, phy=SCP.plusTree)
+anova(SCP.SubsB)
+SCP.SubsB.test<-pairwise(SCP.SubsB, groups=StatusB)
+summary(SCP.SubsB.test) 
+
+#presacral vertebrae numbers
+SCP.PSVnB<-procD.pgls(Species.SCP.Means.coords~PSVnB, phy=SCP.plusTree)
+anova(SCP.PSVnB)
+
+```
+
+
+```{r, pelv-clav, clav-SCP, pelv-SCP two.b.pls and integration}
+#two-block partial least-square analyses and phylogenetic integration analyses
+
+#Before running this for each combination of blocks (pelv-clav, clav-SCP, pelv-SCP), run the relevant reduced datasets through the shape definition pipeline. This is necessary to make sure that the length of the two matches (so that they have the same number of specimens per version of the dataset)
+  
+#SCP and clavicle
+SCPclav<-two.b.pls(Species.SCP.Means.coords, Species.clav.Means.coords, iter=999)
+SCPclav
+plot(SCPclav)
+
+#SCP and clavicle (phylogenetically-informed)
+SCPclavphy<-phylo.integration(Species.SCP.Means.coords, Species.clav.Means.coords, iter=999, phy=SCP.plusTree)
+SCPclav
+plot(SCPclav)
+
+#SCP and pelvis (naïve)
+SCPpelv<-two.b.pls(Species.SCP.Means.coords, Species.pelv.Means.coords, iter=999)
+SCPpelv
+plot(SCPpelv)
+
+#SCP and pelvis (phylogenetically-informed)
+SCPpelvphy<-phylo.integration(Species.SCP.Means.coords, Species.pelv.Means.coords, iter=999, phy=SCP.plusTree)
+SCPpelvphy
+plot(SCPpelvphy)  
+
+#pelvis and clavicle (naïve)
+pelvclav<-two.b.pls(Species.pelv.Means.coords, Species.clav.Means.coords, iter=999)
+pelvclav
+plot(pelvclav)
+
+#pelvis and clavicle (phylogenetically-informed)
+pelvclavphy<-phylo.integration(Species.pelv.Means.coords, Species.clav.Means.coords, iter=999, phy=pelv.plusTree)
+pelvclavphy
+plot(pelvclavphy)
+
+text(pelvclav$XScores, pelvclav$YScores, dimnames(pelvclav$A1.matrix)[[1]])
+dev.off()
+```
+
+
+
