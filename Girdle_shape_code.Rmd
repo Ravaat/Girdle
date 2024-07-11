@@ -140,6 +140,83 @@ tar.link.lwd=3), label=T)
 
 ```
 
+```{r, pelvis symmetry assessment - object symmetry}
+
+
+pelvsymm<-gpagen(pelvic$coords)
+
+
+str(pelvsymm)
+
+
+# Add 'ind' element containing integers from 1 to 87
+pelvsymm$ind <- 1:87
+
+# Create 'land.pairs' matrix
+land.pairs <- matrix(NA, ncol = 2, nrow = 9)
+for (i in 1:9) {
+  land.pairs[i, ] <- c(i, i + 9)
+}
+
+# Add 'land.pairs' to the list
+pelvsymm$land.pairs <- land.pairs
+
+# Print the modified list to verify
+print(pelvsymm)
+
+gdf <- geomorph.data.frame(shape = pelvsymm$coords, 
+ind = pelvsymm$ind)
+pelvsymm.sym <- bilat.symmetry(A = shape, ind = ind, 
+object.sym = TRUE,
+land.pairs=pelvsymm$land.pairs, data = gdf, RRPP = TRUE)
+summary(pelvsymm.sym)
+
+
+
+sym_pelvic<-gm.prcomp(pelvsymm.sym$symm.shape)
+#str(sym_pelvic)
+
+plot(sym_pelvic)
+str(sym_pelvic)
+plot(pelvic.pca)
+
+# Load necessary libraries
+library(ggplot2)
+
+# Example PCA results (you would replace these with your actual PCA results)
+# Let's assume pca1 and pca2 are lists similar to what you've described
+
+# Generate example data (replace with your actual data)
+
+# Combine into a data frame
+df1 <- as.data.frame(pelvic.pca$x[, 1:2], colnames=c("PC1", "PC2"))
+df2 <- as.data.frame(sym_pelvic$x[, 1:2], colnames=c("PC1", "PC2"))
+df1$Group <- "Original"
+df2$Group <- "Symmetrical"
+combined_df <- rbind(df1, df2)
+
+# Plot using ggplot2
+pdf(file="PCA_symm.pdf")
+ggplot(combined_df, aes(x = ifelse(Group == "Original", Comp1, -Comp1), y = Comp2, color = Group)) +
+  geom_point()+
+  labs(x = "PC1", y = "PC2", title = "PCA Overlay Plot") +
+  theme_classic()
+dev.off()
+
+str(pelvsymm.sym$symm.shape)
+str(pelvic.gpa$coords)
+
+dimnames(pelvic.gpa$coords)->dimnames(pelvsymm.sym$symm.shape)
+
+
+Pelvis_symmetry<-two.b.pls(pelvic.gpa$coords, pelvsymm.sym$symm.shape, iter=999)
+Pelvis_symmetry
+
+pdf(file="pelv_symm.pdf")
+plot(Pelvis_symmetry)
+dev.off()
+```
+
 
 ```{r, ecomorph and morph-morph analyses setup: pelvis}
 
